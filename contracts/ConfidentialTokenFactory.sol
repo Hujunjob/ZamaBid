@@ -70,28 +70,19 @@ contract ConfidentialTokenFactory {
     }
 
     function wrapERC20(address erc20_, uint256 amount) external returns (address tokenAddress) {
-        console.log("wrapERC20 amount:", amount);
         address cftokenAddress = confidentialTokens[erc20_];
         ERC20 erc20Token = ERC20(erc20_);
-        console.log("wrapERC20 2");
         require(amount >= 10 ** 18, "Below 1 token");
-        console.log("wrapERC20 2.5");
         require(amount / (10 ** 18) < type(uint64).max, "Amount too large");
-        console.log("wrapERC20 3");
         if (cftokenAddress == address(0)) {
             cftokenAddress = createToken(erc20Token.name(), erc20Token.symbol(), 0);
-            console.log("wrapERC20 4");
             confidentialTokens[erc20_] = cftokenAddress;
         }
         uint64 mintAmount = uint64(amount / 10 ** 18);
-        console.log("wrapERC20 5");
         require(amount / 10 ** 18 <= type(uint64).max, "Amount too large for uint64");
         erc20Token.transferFrom(msg.sender, address(this), amount);
-        console.log("wrapERC20 6");
         ConfidentialToken cfToken = ConfidentialToken(cftokenAddress);
-        console.log("wrapERC20 7");
         cfToken.mint(msg.sender, mintAmount);
-        console.log("wrapERC20 8");
         return cftokenAddress;
     }
 

@@ -1,6 +1,6 @@
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { ethers, fhevm } from "hardhat";
-import { ConfidentialTokenFactory, ConfidentialTokenFactory__factory, ConfidentialToken, ConfidentialToken__factory } from "../types";
+import { ConfidentialTokenFactory, ConfidentialToken, TestCoin, ConfidentialTokenFactory__factory, ConfidentialToken__factory, TestCoin__factory } from "../types";
 import { expect } from "chai";
 
 type Signers = {
@@ -10,17 +10,24 @@ type Signers = {
 };
 
 async function deployFixture() {
-  const factory = (await ethers.getContractFactory("ConfidentialTokenFactory")) as ConfidentialTokenFactory__factory;
-  const factoryContract = (await factory.deploy()) as ConfidentialTokenFactory;
-  const factoryContractAddress = await factoryContract.getAddress();
+  const factoryFactory = (await ethers.getContractFactory("ConfidentialTokenFactory")) as ConfidentialTokenFactory__factory;
+  const tokenFactory = (await factoryFactory.deploy()) as ConfidentialTokenFactory;
+  const tokenFactoryAddress = await tokenFactory.getAddress();
 
-  return { factoryContract, factoryContractAddress };
+  const testCoinFactory = (await ethers.getContractFactory("TestCoin")) as TestCoin__factory;
+  const initialSupply = ethers.parseEther("1000000"); // 1M tokens for testing
+  const testCoin = (await testCoinFactory.deploy("TestCoin", "TEST", initialSupply)) as TestCoin;
+  const testCoinAddress = await testCoin.getAddress();
+
+  return { tokenFactory, tokenFactoryAddress, testCoin, testCoinAddress };
 }
 
 describe("ConfidentialTokenFactory", function () {
   let signers: Signers;
-  let factoryContract: ConfidentialTokenFactory;
-  let factoryContractAddress: string;
+  let tokenFactory: ConfidentialTokenFactory;
+  let tokenFactoryAddress: string;
+  let testCoin: TestCoin;
+  let testCoinAddress: string;
 
   before(async function () {
     const ethSigners: HardhatEthersSigner[] = await ethers.getSigners();
@@ -28,213 +35,184 @@ describe("ConfidentialTokenFactory", function () {
   });
 
   beforeEach(async function () {
-    // Check whether the tests are running against an FHEVM mock environment
     if (!fhevm.isMock) {
       console.warn(`This hardhat test suite cannot run on Sepolia Testnet`);
       this.skip();
     }
 
-    ({ factoryContract, factoryContractAddress } = await deployFixture());
+    ({ tokenFactory, tokenFactoryAddress, testCoin, testCoinAddress } = await deployFixture());
   });
 
-  describe("Token Creation", function () {
-    it("should create a new ConfidentialERC20 token with correct name and symbol", async function () {
-      const tokenName = "Test Token";
-      const tokenSymbol = "TEST";
-
-      const tx = await factoryContract.connect(signers.alice).createToken(tokenName, tokenSymbol);
-      const receipt = await tx.wait();
-
-      // Check that TokenCreated event was emitted
-      const events = receipt?.logs;
-      expect(events).to.have.length.greaterThan(0);
-
-      const tokenCreatedEvent = factoryContract.interface.parseLog(events![0]);
-      expect(tokenCreatedEvent!.name).to.equal("TokenCreated");
-      expect(tokenCreatedEvent!.args.name).to.equal(tokenName);
-      expect(tokenCreatedEvent!.args.symbol).to.equal(tokenSymbol);
-      expect(tokenCreatedEvent!.args.initialSupply).to.equal(0);
-
-      const tokenAddress = tokenCreatedEvent!.args.tokenAddress;
-      expect(tokenAddress).to.be.a("string");
-      expect(tokenAddress).to.not.equal(ethers.ZeroAddress);
-
-      // Verify the created token has correct properties
-      const tokenContract = await ethers.getContractAt("ConfidentialToken", tokenAddress);
-      expect(await tokenContract.name()).to.equal(tokenName);
-      expect(await tokenContract.symbol()).to.equal(tokenSymbol);
-      expect(await tokenContract.owner()).to.equal(factoryContractAddress);
-    });
-
-    it("should create multiple different tokens", async function () {
-      const token1Name = "Token One";
-      const token1Symbol = "TOK1";
-      const token2Name = "Token Two";
-      const token2Symbol = "TOK2";
-
-      // Create first token
-      const tx1 = await factoryContract.connect(signers.alice).createToken(token1Name, token1Symbol);
-      const receipt1 = await tx1.wait();
-      const token1Event = factoryContract.interface.parseLog(receipt1?.logs![0]);
-      const token1Address = token1Event!.args.tokenAddress;
-
-      // Create second token
-      const tx2 = await factoryContract.connect(signers.bob).createToken(token2Name, token2Symbol);
-      const receipt2 = await tx2.wait();
-      const token2Event = factoryContract.interface.parseLog(receipt2?.logs![0]);
-      const token2Address = token2Event!.args.tokenAddress;
-
-      // Tokens should have different addresses
-      expect(token1Address).to.not.equal(token2Address);
-
-      // Verify both tokens exist and have correct properties
-      const token1Contract = await ethers.getContractAt("ConfidentialToken", token1Address);
-      const token2Contract = await ethers.getContractAt("ConfidentialToken", token2Address);
-
-      expect(await token1Contract.name()).to.equal(token1Name);
-      expect(await token1Contract.symbol()).to.equal(token1Symbol);
-      expect(await token2Contract.name()).to.equal(token2Name);
-      expect(await token2Contract.symbol()).to.equal(token2Symbol);
-    });
-
-    it("should allow creating tokens with empty name and symbol", async function () {
-      const tx = await factoryContract.connect(signers.alice).createToken("", "");
-      const receipt = await tx.wait();
-
-      const tokenCreatedEvent = factoryContract.interface.parseLog(receipt?.logs![0]);
-      expect(tokenCreatedEvent!.args.name).to.equal("");
-      expect(tokenCreatedEvent!.args.symbol).to.equal("");
-
-      const tokenAddress = tokenCreatedEvent!.args.tokenAddress;
-      const tokenContract = await ethers.getContractAt("ConfidentialToken", tokenAddress);
-      expect(await tokenContract.name()).to.equal("");
-      expect(await tokenContract.symbol()).to.equal("");
-    });
-  });
-
-  describe("Created Token Functionality", function () {
-    let tokenContract: ConfidentialToken;
-    let tokenAddress: string;
-
-    beforeEach(async function () {
-      const tx = await factoryContract.connect(signers.alice).createToken("Test Token", "TEST");
-      const receipt = await tx.wait();
-      const tokenCreatedEvent = factoryContract.interface.parseLog(receipt?.logs![0]);
-      tokenAddress = tokenCreatedEvent!.args.tokenAddress;
-      tokenContract = await ethers.getContractAt("ConfidentialToken", tokenAddress);
-    });
-
-    it("should have factory as owner of created token", async function () {
-      expect(await tokenContract.owner()).to.equal(factoryContractAddress);
-    });
-
-    it("should have zero initial supply", async function () {
-      const totalSupply = await tokenContract.totalSupply();
-      expect(totalSupply).to.equal(0);
-    });
-
-    it("should allow factory to mint tokens", async function () {
-      const mintAmount = 1000;
-
-      // Factory should be able to mint (since it's the owner)
-      const tx = await factoryContract.connect(signers.deployer).createToken("Mintable Token", "MINT");
-      const receipt = await tx.wait();
-      const event = factoryContract.interface.parseLog(receipt?.logs![0]);
-      const mintableTokenAddress = event!.args.tokenAddress;
-      const mintableToken = await ethers.getContractAt("ConfidentialToken", mintableTokenAddress);
-
-      // Since factory is owner, we need to call mint from a transaction that goes through factory
-      // For this test, let's verify the owner relationship is correct
-      expect(await mintableToken.owner()).to.equal(factoryContractAddress);
+  describe("wrapERC20", function () {
+    it("should create a new confidential token for first-time ERC20", async function () {
+      const amount = ethers.parseEther("5");
       
-      // Test that we can't mint from non-owner
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
+
+      const tx = await tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount);
+      const receipt = await tx.wait();
+
+      const tokenCreatedEvent = receipt?.logs.find(
+        log => log.topics[0] === tokenFactory.interface.getEvent("TokenCreated")?.topicHash
+      );
+      expect(tokenCreatedEvent).to.not.be.undefined;
+
+      const confidentialTokenAddress = await tokenFactory.confidentialTokens(testCoinAddress);
+      expect(confidentialTokenAddress).to.not.equal(ethers.ZeroAddress);
+
+      const confidentialToken = ConfidentialToken__factory.connect(confidentialTokenAddress, signers.alice);
+      expect(await confidentialToken.name()).to.equal(await testCoin.name());
+      expect(await confidentialToken.symbol()).to.equal(await testCoin.symbol());
+    });
+
+    it("should reuse existing confidential token for subsequent wraps", async function () {
+      const amount = ethers.parseEther("5");
+      
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
+      
+      const firstWrapTx = await tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount);
+      await firstWrapTx.wait();
+      
+      const firstConfidentialTokenAddress = await tokenFactory.confidentialTokens(testCoinAddress);
+
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
+      
+      const secondWrapTx = await tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount);
+      await secondWrapTx.wait();
+      
+      const secondConfidentialTokenAddress = await tokenFactory.confidentialTokens(testCoinAddress);
+      
+      expect(firstConfidentialTokenAddress).to.equal(secondConfidentialTokenAddress);
+    });
+
+    it("should transfer ERC20 tokens to factory", async function () {
+      const amount = ethers.parseEther("5");
+      
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
+
+      const aliceBalanceBefore = await testCoin.balanceOf(signers.alice.address);
+      const factoryBalanceBefore = await testCoin.balanceOf(tokenFactoryAddress);
+
+      await tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount);
+
+      const aliceBalanceAfter = await testCoin.balanceOf(signers.alice.address);
+      const factoryBalanceAfter = await testCoin.balanceOf(tokenFactoryAddress);
+
+      expect(aliceBalanceAfter).to.equal(aliceBalanceBefore - amount);
+      expect(factoryBalanceAfter).to.equal(factoryBalanceBefore + amount);
+    });
+
+    it("should mint correct amount of confidential tokens", async function () {
+      const amount = ethers.parseEther("5");
+      const expectedMintAmount = 5n; // 5 * 10^18 / 10^18 = 5
+      
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
+
+      await tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount);
+
+      const confidentialTokenAddress = await tokenFactory.confidentialTokens(testCoinAddress);
+      const confidentialToken = ConfidentialToken__factory.connect(confidentialTokenAddress, signers.alice);
+      
+      expect(await confidentialToken.totalSupply()).to.equal(expectedMintAmount);
+    });
+
+    it("should revert if amount is below 1 token", async function () {
+      const amount = ethers.parseEther("0.5"); // 0.5 ETH
+      
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
+
       await expect(
-        mintableToken.connect(signers.alice).mint(signers.alice.address, mintAmount)
-      ).to.be.revertedWith("Only owner can mint");
+        tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount)
+      ).to.be.revertedWith("Below 1 token");
     });
 
-    it("should not allow non-owner to mint tokens", async function () {
-      const mintAmount = 1000;
+    it("should revert if amount is too large for uint64", async function () {
+      const amount = ethers.parseEther("1"); // Use a normal amount for testing
+      
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
 
-      // Alice should not be able to mint since she's not the owner
+      // Mock the contract to simulate the large amount check by testing with a very large number directly
+      // We'll just test that the function properly validates the input
+      const maxUint64Plus1 = (2n ** 64n) * (10n ** 18n);
+      
       await expect(
-        tokenContract.connect(signers.alice).mint(signers.alice.address, mintAmount)
-      ).to.be.revertedWith("Only owner can mint");
+        tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, maxUint64Plus1)
+      ).to.be.revertedWith("Amount too large");
     });
 
-    it("should handle encrypted balance operations", async function () {
-      // This test verifies that the created token supports encrypted operations
-      // Since we can't mint without being the owner (factory), we'll test that the 
-      // balance query works and returns encrypted zero
-      const encryptedBalance = await tokenContract.balanceOf(signers.alice.address);
-      expect(encryptedBalance).to.equal(ethers.ZeroHash); // Uninitialized encrypted value
-    });
-  });
-
-  describe("Gas Efficiency", function () {
-    it("should deploy tokens with reasonable gas cost", async function () {
-      const tx = await factoryContract.connect(signers.alice).createToken("Gas Test", "GAS");
-      const receipt = await tx.wait();
+    it("should revert if insufficient allowance", async function () {
+      const amount = ethers.parseEther("5");
+      const insufficientAllowance = ethers.parseEther("2");
       
-      // Verify transaction succeeded
-      expect(receipt?.status).to.equal(1);
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, insufficientAllowance);
+
+      await expect(
+        tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount)
+      ).to.be.reverted;
+    });
+
+    it("should revert if insufficient balance", async function () {
+      const amount = ethers.parseEther("5");
+      const insufficientBalance = ethers.parseEther("2");
       
-      // Gas usage should be reasonable (this is more of a monitoring test)
-      const gasUsed = receipt?.gasUsed;
-      expect(gasUsed).to.be.greaterThan(0);
-      console.log(`Gas used for token creation: ${gasUsed}`);
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, insufficientBalance);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
+
+      await expect(
+        tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount)
+      ).to.be.reverted;
     });
   });
 
-  describe("Edge Cases", function () {
-    it("should handle very long token names and symbols", async function () {
-      const longName = "A".repeat(100);
-      const longSymbol = "B".repeat(50);
-
-      const tx = await factoryContract.connect(signers.alice).createToken(longName, longSymbol);
-      const receipt = await tx.wait();
-
-      const tokenCreatedEvent = factoryContract.interface.parseLog(receipt?.logs![0]);
-      expect(tokenCreatedEvent!.args.name).to.equal(longName);
-      expect(tokenCreatedEvent!.args.symbol).to.equal(longSymbol);
+  describe("confidentialTokens mapping", function () {
+    it("should return zero address for non-existing tokens", async function () {
+      const nonExistentToken = ethers.Wallet.createRandom().address;
+      const confidentialTokenAddress = await tokenFactory.confidentialTokens(nonExistentToken);
+      expect(confidentialTokenAddress).to.equal(ethers.ZeroAddress);
     });
 
-    it("should handle special characters in token names and symbols", async function () {
-      const specialName = "Token-With_Special.Chars!@#";
-      const specialSymbol = "T-S_C.!";
+    it("should return correct confidential token address after wrapping", async function () {
+      const amount = ethers.parseEther("5");
+      
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
 
-      const tx = await factoryContract.connect(signers.alice).createToken(specialName, specialSymbol);
-      const receipt = await tx.wait();
+      await tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount);
 
-      const tokenCreatedEvent = factoryContract.interface.parseLog(receipt?.logs![0]);
-      expect(tokenCreatedEvent!.args.name).to.equal(specialName);
-      expect(tokenCreatedEvent!.args.symbol).to.equal(specialSymbol);
-    });
-
-    it("should handle unicode characters in token names and symbols", async function () {
-      const unicodeName = "代币测试 🚀";
-      const unicodeSymbol = "代币";
-
-      const tx = await factoryContract.connect(signers.alice).createToken(unicodeName, unicodeSymbol);
-      const receipt = await tx.wait();
-
-      const tokenCreatedEvent = factoryContract.interface.parseLog(receipt?.logs![0]);
-      expect(tokenCreatedEvent!.args.name).to.equal(unicodeName);
-      expect(tokenCreatedEvent!.args.symbol).to.equal(unicodeSymbol);
+      const confidentialTokenAddress = await tokenFactory.confidentialTokens(testCoinAddress);
+      expect(confidentialTokenAddress).to.not.equal(ethers.ZeroAddress);
+      
+      const confidentialToken = ConfidentialToken__factory.connect(confidentialTokenAddress, signers.alice);
+      expect(await confidentialToken.owner()).to.equal(tokenFactoryAddress);
     });
   });
 
-  describe("Event Emission", function () {
-    it("should emit TokenCreated event with correct parameters", async function () {
-      const tokenName = "Event Test Token";
-      const tokenSymbol = "EVENT";
+  describe("Events", function () {
+    it("should emit TokenCreated event when creating new confidential token", async function () {
+      const amount = ethers.parseEther("5");
+      
+      await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
+      await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
 
-      await expect(factoryContract.connect(signers.alice).createToken(tokenName, tokenSymbol))
-        .to.emit(factoryContract, "TokenCreated")
+      const tx = await tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount);
+      await tx.wait();
+      
+      const confidentialTokenAddress = await tokenFactory.confidentialTokens(testCoinAddress);
+      
+      await expect(tx)
+        .to.emit(tokenFactory, "TokenCreated")
         .withArgs(
-          (tokenAddress: string) => tokenAddress !== ethers.ZeroAddress,
-          tokenName,
-          tokenSymbol,
+          confidentialTokenAddress,
+          await testCoin.name(),
+          await testCoin.symbol(),
           0
         );
     });
