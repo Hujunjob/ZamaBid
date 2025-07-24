@@ -1,5 +1,6 @@
 import { DeployFunction } from "hardhat-deploy/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { ethers } from "hardhat";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployer } = await hre.getNamedAccounts();
@@ -21,7 +22,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const deployedTestCoin = await deploy("TestCoin", {
     from: deployer,
-    args: ["TestCoin", "TEST", 1000000000000000000000000], // 1,000,000 tokens with 18 decimals
+    args: ["TestCoin", "TEST", ethers.parseEther("1000000")], // 1,000,000 tokens with 18 decimals
     log: true,
   });
 
