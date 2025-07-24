@@ -1,6 +1,6 @@
 import { task } from "hardhat/config";
 import type { TaskArguments } from "hardhat/types";
-
+import { FhevmType } from "@fhevm/hardhat-plugin";
 /**
  * Deploy TestCoin ERC20 token
  * Example: npx hardhat --network localhost task:deploy-testcoin --name "Test Coin" --symbol "TEST" --supply 1000000
@@ -150,6 +150,8 @@ task("task:wrap-erc20", "Wrap ERC20 tokens to ConfidentialToken")
       
       // Wrap tokens
       console.log(`Wrapping ${taskArguments.amount} tokens...`);
+      console.log("taskArguments.erc20 %s,wrapAmount:%s",taskArguments.erc20,wrapAmount);
+      
       const wrapTx = await factory.wrapERC20(taskArguments.erc20, wrapAmount);
       await wrapTx.wait();
       
@@ -217,6 +219,51 @@ task("task:get-token-info", "Get information about ERC20 and its corresponding C
         console.log(`Symbol: ${cfSymbol}`);
         console.log(`Owner: ${cfOwner}`);
       }
+      
+    } catch (error) {
+      console.error(`Error getting token info: ${error}`);
+    }
+  });
+
+
+/**
+ * Get token information for both ERC20 and ConfidentialToken
+ * Example: npx hardhat --network localhost task:get-token-info --erc20 0x123... --factory 0x456...
+ */
+task("task:get-wrap-info", "Get information about ERC20 and its corresponding ConfidentialToken")
+  .addParam("cftoken", "The address of the ConfidentialToken contract")
+  .addParam("user","user index")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+     const { ethers, deployments, fhevm } = hre;
+
+    await fhevm.initializeCLIApi();
+
+    const signers = await ethers.getSigners();
+    const cftoken = await ethers.getContractAt("ConfidentialToken", taskArguments.cftoken);
+    const userIndex = taskArguments.user
+    const signer = signers[userIndex]
+
+    try {
+      // ERC20 token info
+      const name = await cftoken.name();
+      const symbol = await cftoken.symbol();
+      const totalSupply = await cftoken.totalSupply();
+      const euserBalance = await cftoken.balanceOf(signers[userIndex].address);
+      
+      console.log("=== ERC20 Token Info ===");
+      console.log(`Name: ${name}`);
+      console.log(`Symbol: ${symbol}`);
+      console.log(`Total Supply: ${(totalSupply)} tokens`);
+      console.log(`Your Balance: ${(euserBalance)} tokens`);
+
+
+          const clearCount = await fhevm.userDecryptEuint(
+            FhevmType.euint64,
+            euserBalance,
+            taskArguments.cftoken,
+            signers[0],
+          );
+          console.log(`Clear count    : ${clearCount}`);
       
     } catch (error) {
       console.error(`Error getting token info: ${error}`);
