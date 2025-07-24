@@ -5,6 +5,8 @@ import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.so
 import {IConfidentialERC20} from "./IConfidentialERC20.sol";
 import {FHEErrors} from "./FHEErrors.sol";
 import {FHE, externalEuint64, eaddress, euint64, ebool} from "@fhevm/solidity/lib/FHE.sol";
+import "hardhat/console.sol";
+import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 
 /**
  * @title   ConfidentialERC20.
@@ -14,7 +16,7 @@ import {FHE, externalEuint64, eaddress, euint64, ebool} from "@fhevm/solidity/li
  *          and setting allowances, but uses encrypted data types.
  *          The total supply is not encrypted.
  */
-abstract contract ConfidentialERC20 is IConfidentialERC20, IERC20Errors, FHEErrors {
+abstract contract ConfidentialERC20 is IConfidentialERC20, IERC20Errors, FHEErrors, SepoliaConfig {
     /// @notice Used as a placeholder in `Approval` & `Transfer` events to comply with the official EIP20.
     uint256 internal constant _PLACEHOLDER = type(uint256).max;
     /// @notice Total supply.
@@ -186,7 +188,9 @@ abstract contract ConfidentialERC20 is IConfidentialERC20, IERC20Errors, FHEErro
      *      by the function calling it.
      */
     function _unsafeMintNoEvent(address account, uint64 amount) internal virtual {
-        euint64 newBalanceAccount = FHE.add(_balances[account], amount);
+        console.log("ConfidentialToken _unsafeMintNoEvent:", amount);
+        euint64 eAmount = FHE.asEuint64(amount);
+        euint64 newBalanceAccount = FHE.add(_balances[account], eAmount);
         _balances[account] = newBalanceAccount;
         FHE.allowThis(newBalanceAccount);
         FHE.allow(newBalanceAccount, account);
