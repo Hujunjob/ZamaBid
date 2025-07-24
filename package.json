@@ -24,12 +24,14 @@
     "hardhat"
   ],
   "dependencies": {
-    "encrypted-types": "^0.0.4",
+    "@fhevm/hardhat-plugin": "^0.0.1-6",
     "@fhevm/solidity": "^0.7.0",
-    "@zama-fhe/oracle-solidity": "^0.1.0"
+    "@openzeppelin/confidential-contracts": "^0.2.0-rc.1",
+    "@zama-fhe/oracle-solidity": "^0.1.0",
+    "encrypted-types": "^0.0.4",
+    "fhevm-contracts": "^0.2.4"
   },
   "devDependencies": {
-    "@fhevm/hardhat-plugin": "^0.0.1-6",
     "@nomicfoundation/hardhat-chai-matchers": "^2.1.0",
     "@nomicfoundation/hardhat-ethers": "^3.1.0",
     "@nomicfoundation/hardhat-network-helpers": "^1.1.0",
