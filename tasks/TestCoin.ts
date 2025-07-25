@@ -269,3 +269,155 @@ task("task:get-wrap-info", "Get information about ERC20 and its corresponding Co
       console.error(`Error getting token info: ${error}`);
     }
   });
+
+/**
+ * Unwrap ConfidentialToken back to ERC20 tokens
+ * Example: npx hardhat --network localhost task:unwrap-token --factory 0x123... --cftoken 0x456... --amount 50 --user 0
+ */
+task("task:unwrap-token", "Unwrap ConfidentialToken back to ERC20 tokens")
+  .addParam("factory", "The address of the ConfidentialTokenFactory contract")
+  .addParam("cftoken", "The address of the ConfidentialToken to unwrap")
+  .addParam("amount", "The amount of ConfidentialTokens to unwrap")
+  .addParam("user", "User index")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers } = hre;
+    
+    const signers = await ethers.getSigners();
+    const factory = await ethers.getContractAt("ConfidentialTokenFactory", taskArguments.factory);
+    const userIndex = parseInt(taskArguments.user);
+    const signer = signers[userIndex];
+    
+    const unwrapAmount = parseInt(taskArguments.amount);
+    
+    try {
+      // Get the corresponding ERC20 token address
+      const erc20Address = await factory.getERC20(taskArguments.cftoken);
+      if (erc20Address === ethers.ZeroAddress) {
+        throw new Error("No corresponding ERC20 token found for this ConfidentialToken");
+      }
+      
+      console.log(`ERC20 token address: ${erc20Address}`);
+      console.log(`Starting unwrap process for ${unwrapAmount} tokens...`);
+      
+      // Check if user has pending unwrap request
+      const existingRequestId = await factory.usersUnwrapRequests(signer.address);
+      if (existingRequestId > 0) {
+        throw new Error("You already have a pending unwrap request. Please confirm or wait for it to complete.");
+      }
+      
+      // Start unwrap process
+      const unwrapTx = await factory.connect(signer).unwarp(taskArguments.cftoken, unwrapAmount);
+      await unwrapTx.wait();
+      
+      console.log(`Unwrap request initiated successfully!`);
+      console.log(`Transaction hash: ${unwrapTx.hash}`);
+      console.log(`Please wait for the decryption callback to be processed...`);
+      console.log(`Then call task:confirm-unwrap to complete the process.`);
+      
+      // Get the request ID
+      const requestId = await factory.usersUnwrapRequests(signer.address);
+      console.log(`Request ID: ${requestId}`);
+      
+    } catch (error) {
+      console.error(`Error unwrapping tokens: ${error}`);
+    }
+  });
+
+/**
+ * Confirm unwrap after decryption callback
+ * Example: npx hardhat --network localhost task:confirm-unwrap --factory 0x123... --user 0
+ */
+task("task:confirm-unwrap", "Confirm unwrap after decryption callback is processed")
+  .addParam("factory", "The address of the ConfidentialTokenFactory contract")
+  .addParam("user", "User index")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers } = hre;
+    
+    const signers = await ethers.getSigners();
+    const factory = await ethers.getContractAt("ConfidentialTokenFactory", taskArguments.factory);
+    const userIndex = parseInt(taskArguments.user);
+    const signer = signers[userIndex];
+    
+    try {
+      // Check if user has a pending request
+      const requestId = await factory.usersUnwrapRequests(signer.address);
+      if (requestId === 0n) {
+        throw new Error("No pending unwrap request found");
+      }
+      
+      console.log(`Found pending request ID: ${requestId}`);
+      
+      // Get request details
+      const request = await factory.unwrapRequestIds(requestId);
+      if (!request.hasCallback) {
+        throw new Error("Decryption callback has not been processed yet. Please wait.");
+      }
+      
+      console.log(`Confirming unwrap for ${request.burnAmount} tokens...`);
+      
+      // Get ERC20 token for balance checking
+      const erc20 = await ethers.getContractAt("TestCoin", request.erc20);
+      const balanceBefore = await erc20.balanceOf(signer.address);
+      
+      // Confirm unwrap
+      const confirmTx = await factory.connect(signer).confirmUnwarp();
+      await confirmTx.wait();
+      
+      console.log(`Unwrap confirmed successfully!`);
+      console.log(`Transaction hash: ${confirmTx.hash}`);
+      
+      // Check new balance
+      const balanceAfter = await erc20.balanceOf(signer.address);
+      const received = balanceAfter - balanceBefore;
+      
+      console.log(`ERC20 tokens received: ${ethers.formatEther(received)} tokens`);
+      console.log(`New ERC20 balance: ${ethers.formatEther(balanceAfter)} tokens`);
+      
+    } catch (error) {
+      console.error(`Error confirming unwrap: ${error}`);
+    }
+  });
+
+/**
+ * Check unwrap request status
+ * Example: npx hardhat --network localhost task:check-unwrap-status --factory 0x123... --user 0
+ */
+task("task:check-unwrap-status", "Check the status of unwrap request")
+  .addParam("factory", "The address of the ConfidentialTokenFactory contract")
+  .addParam("user", "User index")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers } = hre;
+    
+    const signers = await ethers.getSigners();
+    const factory = await ethers.getContractAt("ConfidentialTokenFactory", taskArguments.factory);
+    const userIndex = parseInt(taskArguments.user);
+    const signer = signers[userIndex];
+    
+    try {
+      const requestId = await factory.usersUnwrapRequests(signer.address);
+      
+      if (requestId === 0n) {
+        console.log("No pending unwrap request found");
+        return;
+      }
+      
+      console.log(`Request ID: ${requestId}`);
+      
+      const request = await factory.unwrapRequestIds(requestId);
+      console.log("=== Unwrap Request Status ===");
+      console.log(`Owner: ${request.owner}`);
+      console.log(`ERC20 Token: ${request.erc20}`);
+      console.log(`Has Callback: ${request.hasCallback}`);
+      console.log(`Burn Amount: ${request.burnAmount}`);
+      
+      if (request.hasCallback) {
+        console.log(`✅ Ready to confirm unwrap for ${request.burnAmount} tokens`);
+        console.log(`Run: npx hardhat --network localhost task:confirm-unwrap --factory ${taskArguments.factory} --user ${taskArguments.user}`);
+      } else {
+        console.log(`⏳ Waiting for decryption callback...`);
+      }
+      
+    } catch (error) {
+      console.error(`Error checking unwrap status: ${error}`);
+    }
+  });

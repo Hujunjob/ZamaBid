@@ -60,8 +60,8 @@ contract ConfidentialTokenFactory is SepoliaConfig {
         address erc20;
     }
 
-    mapping(address => uint256) private usersUnwrapRequests;
-    mapping(uint256 => UnwarpRequest) private unwrapRequestIds;
+    mapping(address => uint256) public usersUnwrapRequests;
+    mapping(uint256 => UnwarpRequest) public unwrapRequestIds;
 
     /**
      * @notice Create a new ConfidentialERC20 token
