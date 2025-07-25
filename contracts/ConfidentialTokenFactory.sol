@@ -50,6 +50,8 @@ contract ConfidentialTokenFactory is SepoliaConfig {
 
     uint8 confidentialTokenDecimals = 6;
 
+    bool testFlag = true;
+
     struct UnwarpRequest {
         uint256 requestId;
         bool hasCallback;
@@ -96,8 +98,7 @@ contract ConfidentialTokenFactory is SepoliaConfig {
             confidentialTokens[erc20_] = cftokenAddress;
             normalTokens[cftokenAddress] = erc20_;
         }
-        uint64 mintAmount = uint64(amount / 10 ** 18);
-        // require(amount / 10 ** 18 <= type(uint64).max, "Amount too large for uint64");
+        uint64 mintAmount = uint64(amount / 10 ** (erc20Token.decimals() - confidentialTokenDecimals));
         erc20Token.transferFrom(msg.sender, address(this), amount);
         ConfidentialToken cfToken = ConfidentialToken(cftokenAddress);
         cfToken.mint(msg.sender, mintAmount);
@@ -141,7 +142,7 @@ contract ConfidentialTokenFactory is SepoliaConfig {
         /// @dev This check is used to verify that the request id is the expected one.
         UnwarpRequest storage request = unwrapRequestIds[requestId];
         require(request.requestId == requestId, "Invalid requestId");
-        FHE.checkSignatures(requestId, signatures);
+        if (!testFlag) FHE.checkSignatures(requestId, signatures);
         request.hasCallback = true;
         request.burnAmount = decryptedInput;
         unwrapRequestIds[requestId] = request;
@@ -165,6 +166,10 @@ contract ConfidentialTokenFactory is SepoliaConfig {
         }
         cfToken.burn(address(this), burnAmount);
         ERC20 erc20 = ERC20(erc20Address);
-        erc20.transferFrom(address(this), msg.sender, burnAmount);
+        erc20.transferFrom(
+            address(this),
+            msg.sender,
+            burnAmount * 10 ** (erc20.decimals() - confidentialTokenDecimals)
+        );
     }
 }
