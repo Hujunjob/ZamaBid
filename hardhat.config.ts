@@ -11,6 +11,7 @@ import "solidity-coverage";
 
 import "./tasks/TestCoin";
 import "./tasks/ConfidentialToken";
+import "./tasks/ConfidentialTokenFactory";
 
 // Run 'npx hardhat vars setup' to see the list of variables that need to be set
 
@@ -33,7 +34,7 @@ const config: HardhatUserConfig = {
     excludeContracts: [],
   },
   networks: {
-    localhost:{
+    localhost: {
       loggingEnabled: true,
     },
     hardhat: {
