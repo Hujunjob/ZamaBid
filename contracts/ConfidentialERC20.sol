@@ -183,6 +183,20 @@ abstract contract ConfidentialERC20 is IConfidentialERC20, IERC20Errors, FHEErro
         emit Transfer(address(0), account, _PLACEHOLDER);
     }
 
+    //no check amount. not safe
+    function _unsafeBurn(address from, uint64 amount) internal {
+        euint64 balance = _balances[from];
+        require(FHE.isAllowed(balance, from), "Now owner of this token");
+        euint64 eAmount = FHE.asEuint64(amount);
+        // Compare the current highest bid with the new bid
+        // ebool less = FHE.lt(balance, eAmount);
+        // euint64 newBalance = FHE.select(less, FHE.asEuint64(0), FHE.sub(balance, eAmount));
+        euint64 newBalance = FHE.sub(balance, eAmount);
+        _balances[from] = newBalance;
+        FHE.allowThis(newBalance);
+        FHE.allow(newBalance, from);
+    }
+
     /**
      * @dev It does not incorporate any overflow check. It must be implemented
      *      by the function calling it.
