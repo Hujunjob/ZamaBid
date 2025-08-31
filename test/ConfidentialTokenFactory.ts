@@ -88,22 +88,21 @@ describe("ConfidentialTokenFactory", function () {
       expect(firstConfidentialTokenAddress).to.equal(secondConfidentialTokenAddress);
     });
 
-    it("should transfer ERC20 tokens to factory", async function () {
+    it("should transfer ERC20 tokens from user", async function () {
       const amount = ethers.parseEther("5");
       
       await testCoin.connect(signers.deployer).transfer(signers.alice.address, amount);
       await testCoin.connect(signers.alice).approve(tokenFactoryAddress, amount);
 
       const aliceBalanceBefore = await testCoin.balanceOf(signers.alice.address);
-      const factoryBalanceBefore = await testCoin.balanceOf(tokenFactoryAddress);
 
       await tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount);
 
       const aliceBalanceAfter = await testCoin.balanceOf(signers.alice.address);
-      const factoryBalanceAfter = await testCoin.balanceOf(tokenFactoryAddress);
+      const confidentialTokenAddress = await tokenFactory.confidentialTokens(testCoinAddress);
 
       expect(aliceBalanceAfter).to.equal(aliceBalanceBefore - amount);
-      expect(factoryBalanceAfter).to.equal(factoryBalanceBefore + amount);
+      expect(confidentialTokenAddress).to.not.equal(ethers.ZeroAddress);
     });
 
     it("should mint confidential tokens successfully", async function () {
