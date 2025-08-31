@@ -1,6 +1,6 @@
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { ethers, fhevm } from "hardhat";
-import { ConfidentialTokenFactory, ConfidentialToken, TestCoin, ConfidentialTokenFactory__factory, ConfidentialToken__factory, TestCoin__factory } from "../types";
+import { ConfidentialTokenFactory, ConfidentialTokenWrapper, TestCoin, ConfidentialTokenFactory__factory, ConfidentialTokenWrapper__factory, TestCoin__factory } from "../types";
 import { expect } from "chai";
 
 type Signers = {
@@ -61,7 +61,7 @@ describe("ConfidentialTokenFactory", function () {
       const confidentialTokenAddress = await tokenFactory.confidentialTokens(testCoinAddress);
       expect(confidentialTokenAddress).to.not.equal(ethers.ZeroAddress);
 
-      const confidentialToken = ConfidentialToken__factory.connect(confidentialTokenAddress, signers.alice);
+      const confidentialToken = ConfidentialTokenWrapper__factory.connect(confidentialTokenAddress, signers.alice);
       expect(await confidentialToken.name()).to.equal(await testCoin.name());
       expect(await confidentialToken.symbol()).to.equal(await testCoin.symbol());
     });
@@ -116,7 +116,7 @@ describe("ConfidentialTokenFactory", function () {
       await tokenFactory.connect(signers.alice).wrapERC20(testCoinAddress, amount);
 
       const confidentialTokenAddress = await tokenFactory.confidentialTokens(testCoinAddress);
-      const confidentialToken = ConfidentialToken__factory.connect(confidentialTokenAddress, signers.alice);
+      const confidentialToken = ConfidentialTokenWrapper__factory.connect(confidentialTokenAddress, signers.alice);
       
       expect(await confidentialToken.totalSupply()).to.equal(expectedMintAmount);
     });
@@ -190,7 +190,7 @@ describe("ConfidentialTokenFactory", function () {
       const confidentialTokenAddress = await tokenFactory.confidentialTokens(testCoinAddress);
       expect(confidentialTokenAddress).to.not.equal(ethers.ZeroAddress);
       
-      const confidentialToken = ConfidentialToken__factory.connect(confidentialTokenAddress, signers.alice);
+      const confidentialToken = ConfidentialTokenWrapper__factory.connect(confidentialTokenAddress, signers.alice);
       expect(await confidentialToken.owner()).to.equal(tokenFactoryAddress);
     });
   });
